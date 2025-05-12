@@ -1,0 +1,1 @@
+ /Users/kipackjeong/CascadeProjects/simple-budget-app/frontend/.dart_tool/flutter_build/d73bd680b6ab63a6bb73b1f8fbb489ce/native_assets.json: 
