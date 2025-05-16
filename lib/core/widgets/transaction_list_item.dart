@@ -16,17 +16,24 @@ class TransactionListItem extends StatelessWidget {
     decimalDigits: 2,
   );
 
+  /// Callback when item is tapped
+  final VoidCallback? onTap;
+
   /// Creates a transaction list item widget
   TransactionListItem({
     Key? key,
     required this.transaction,
+    this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: Row(
         children: [
           _buildCategoryIcon(),
           const SizedBox(width: 16),
@@ -63,6 +70,7 @@ class TransactionListItem extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 

@@ -7,7 +7,7 @@ class AppTheme {
   static const Color primaryColor = Color(0xFF121212);
 
   /// Secondary color used for accents - vibrant for highlighting actions
-  static const Color secondaryColor = Color(0xFF00C6FF);
+  static const Color secondaryColor = Color.fromARGB(215, 20, 164, 203);
 
   /// Background color for light theme - subtle for minimal distraction
   static const Color bgColor = Color(0xFFF9F9F9);
@@ -22,7 +22,7 @@ class AppTheme {
   static const Color darkCardColor = Color(0xFF1E1E1E);
 
   /// Color for positive values like income
-  static const Color incomeColor = Color(0xFF00E676);
+  static const Color incomeColor = Color.fromARGB(255, 62, 187, 152);
 
   /// Color for negative values like expenses
   static const Color expenseColor = Color(0xFFFF5252);

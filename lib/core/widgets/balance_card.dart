@@ -5,13 +5,13 @@ import 'package:intl/intl.dart';
 class BalanceCard extends StatelessWidget {
   /// The total account balance
   final double balance;
-  
+
   /// The total income amount
   final double totalIncome;
-  
-  /// The total expenses amount 
+
+  /// The total expenses amount
   final double totalExpenses;
-  
+
   /// Currency formatter
   final NumberFormat _currencyFormat = NumberFormat.currency(
     symbol: '\$',
@@ -29,27 +29,25 @@ class BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(16),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Total Balance',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 16,
-              ),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
-            const SizedBox(height: 8),
-            // Total Balance amount styled in white for high contrast
+            const SizedBox(height: 16),
+            // Total Balance amount styled for high contrast
             Text(
               _currencyFormat.format(balance),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                color: balance >= 0 ? Colors.green[700] : Colors.red[700],
               ),
             ),
             const SizedBox(height: 24),

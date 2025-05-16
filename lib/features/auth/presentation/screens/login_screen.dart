@@ -251,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: theme.colorScheme.onSurface
                                     .withOpacity(0.18))),
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: Text('Or continue with',
                               style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurface

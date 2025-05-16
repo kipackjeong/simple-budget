@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:spending_tracker/core/utils/animation_utils.dart';
 import 'package:spending_tracker/core/widgets/transaction_list_item.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/budget_analysis_providers.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/periodic_budget_providers.dart';
 import 'package:spending_tracker/features/transactions/domain/entities/transaction.dart';
 
 /// A widget that displays transactions with infinite scrolling
@@ -9,16 +10,16 @@ import 'package:spending_tracker/features/transactions/domain/entities/transacti
 class InfiniteTransactionList extends ConsumerStatefulWidget {
   /// List of all transactions
   final List<Transaction> transactions;
-  
+
   /// Callback when user refreshes the list
   final Future<void> Function()? onRefresh;
-  
+
   /// Callback when user reaches end of list
   final Future<void> Function()? onLoadMore;
-  
+
   /// Initial page size to display
   final int initialPageSize;
-  
+
   /// Creates an infinite transaction list widget
   const InfiniteTransactionList({
     Key? key,
@@ -29,26 +30,28 @@ class InfiniteTransactionList extends ConsumerStatefulWidget {
   }) : super(key: key);
 
   @override
-  ConsumerState<InfiniteTransactionList> createState() => _InfiniteTransactionListState();
+  ConsumerState<InfiniteTransactionList> createState() =>
+      _InfiniteTransactionListState();
 }
 
-class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionList> {
+class _InfiniteTransactionListState
+    extends ConsumerState<InfiniteTransactionList> {
   // Current number of transactions to show
   late int _displayCount;
-  
+
   // Scroll controller to detect when user reaches bottom
   final ScrollController _scrollController = ScrollController();
-  
+
   // Whether we're currently loading more items
   bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Set initial display count
     _displayCount = widget.initialPageSize;
-    
+
     // Set up scroll listener for infinite scroll
     _scrollController.addListener(_onScroll);
   }
@@ -63,7 +66,7 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
   @override
   void didUpdateWidget(InfiniteTransactionList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // If transaction list changed significantly, reset display count
     if (widget.transactions.length > oldWidget.transactions.length + 5 ||
         widget.transactions.length < oldWidget.transactions.length) {
@@ -76,10 +79,10 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
   /// Handle scroll events for infinite scrolling
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    
+
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
-    
+
     // Load more data when user scrolls to 80% of the list
     if (currentScroll > (maxScroll * 0.8) &&
         !_isLoadingMore &&
@@ -92,17 +95,17 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
   /// Load more transactions
   Future<void> _loadMore() async {
     if (_isLoadingMore) return;
-    
+
     try {
       setState(() {
         _isLoadingMore = true;
       });
-      
+
       // Call onLoadMore callback if provided
       if (widget.onLoadMore != null) {
         await widget.onLoadMore!();
       }
-      
+
       // Increment displayed transactions by 10
       setState(() {
         _displayCount = _displayCount + 10;
@@ -128,7 +131,7 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
         setState(() {
           _displayCount = widget.initialPageSize;
         });
-        
+
         // Call refresh callback
         await widget.onRefresh!();
       }
@@ -148,7 +151,8 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.account_balance_wallet_outlined, size: 64, color: Colors.grey),
+              Icon(Icons.account_balance_wallet_outlined,
+                  size: 64, color: Colors.grey),
               SizedBox(height: 16),
               Text('No transactions yet'),
               SizedBox(height: 8),
@@ -162,71 +166,290 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
       );
     }
 
-    // Determine transactions to display
-    final displayedTransactions = widget.transactions
-        .take(_displayCount)
-        .toList();
-        
-    // Render the list with pull-to-refresh
+    // Get the transactions to display with pagination
+    final displayedTransactions =
+        widget.transactions.take(_displayCount).toList();
+
+    // Group transactions by week
+    final groupedTransactions = _groupTransactionsByWeek(displayedTransactions);
+
+    // Get week analysis data from the provider
+    final asyncWeeklyAnalysis = ref.watch(weeklyBudgetAnalysisProvider);
+
+    // Render the list with pull-to-refresh and weekly analysis
     final Widget res = RefreshIndicator(
       onRefresh: _handleRefresh,
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: displayedTransactions.length + 1, // +1 for loading indicator
-        itemBuilder: (context, index) {
-          // Show loading indicator at the end
-          if (index == displayedTransactions.length) {
-            return _buildLoadingIndicator();
-          }
-          
-          // Get transaction for this index
-          final transaction = displayedTransactions[index];
-          
-          // Create the animated transaction item with swipe actions
-          return _AnimatedTransactionItem(
-            key: ValueKey(transaction.id),
-            transaction: transaction,
-            index: index,
+      child: asyncWeeklyAnalysis.when(
+        data: (weeklyAnalyses) => ListView.builder(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: groupedTransactions.length + 1, // +1 for loading indicator
+          itemBuilder: (context, index) {
+            // Show loading indicator at the end
+            if (index == groupedTransactions.length) {
+              return _buildLoadingIndicator();
+            }
+
+            // Get the week group
+            final weekGroup = groupedTransactions[index];
+            final weekStart = weekGroup.key;
+            final weekEnd = _endOfWeek(weekStart);
+            final weekTransactions = weekGroup.value;
+
+            // Find the budget analysis for this week
+            final weeklyAnalysis = weeklyAnalyses.firstWhere(
+              (analysis) => _isSameWeek(analysis.weekStart, weekStart),
+              orElse: () {
+                // Calculate actual spent for this week based on transactions
+                final actualSpent = weekTransactions
+                    .where((t) => t.isExpense)
+                    .fold(0.0, (sum, t) => sum + t.amount.abs());
+
+                // Get the most recent weekly budget from the provider if available
+                // This is a fallback calculation - better than showing zeros
+                final budgetedAmount = ref
+                    .read(periodicBudgetsProvider)
+                    .maybeWhen(
+                      data: (budgets) {
+                        final weeklyBudgets = budgets
+                            .where((b) => b.period.toLowerCase() == 'weekly')
+                            .toList();
+
+                        if (weeklyBudgets.isNotEmpty) {
+                          // Return the sum of all weekly budgets or most recent one
+                          return weeklyBudgets.fold(
+                              0.0, (sum, budget) => sum + budget.amount);
+                        }
+                        return 0.0;
+                      },
+                      orElse: () => 0.0,
+                    );
+
+                return WeeklyBudgetAnalysis(
+                  weekStart: weekStart,
+                  weekEnd: weekEnd,
+                  budgetedAmount: budgetedAmount,
+                  actualSpent: actualSpent,
+                );
+              },
+            );
+
+            // Build the week section with header and items
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Week header with budget comparison
+                _buildWeekHeader(context, weeklyAnalysis),
+                // Transactions for this week
+                ...weekTransactions.asMap().entries.map((entry) {
+                  final transaction = entry.value;
+                  final innerIndex = entry.key;
+
+                  return _AnimatedTransactionItem(
+                    key: ValueKey(transaction.id),
+                    transaction: transaction,
+                    index: innerIndex,
+                  );
+                }).toList(),
+                // Add some space between weeks
+                const SizedBox(height: 16),
+              ],
+            );
+          },
+        ),
+        loading: () => ListView.builder(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: displayedTransactions.length + 1,
+          itemBuilder: (context, index) {
+            if (index == displayedTransactions.length) {
+              return _buildLoadingIndicator();
+            }
+
+            final transaction = displayedTransactions[index];
+
+            return _AnimatedTransactionItem(
+              key: ValueKey(transaction.id),
+              transaction: transaction,
+              index: index,
+            );
+          },
+        ),
+        error: (err, stack) {
+          // Log the error for debugging
+          print('Error loading budget analysis: $err');
+          print(stack);
+
+          // Fallback to a regular list without budget info
+          return ListView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: displayedTransactions.length + 1,
+            itemBuilder: (context, index) {
+              if (index == displayedTransactions.length) {
+                return _buildLoadingIndicator();
+              }
+
+              final transaction = displayedTransactions[index];
+
+              return _AnimatedTransactionItem(
+                key: ValueKey(transaction.id),
+                transaction: transaction,
+                index: index,
+              );
+            },
           );
         },
       ),
     );
-    
+
     return res;
+  }
+
+  /// Group transactions by week
+  List<MapEntry<DateTime, List<Transaction>>> _groupTransactionsByWeek(
+      List<Transaction> transactions) {
+    // Sort transactions by date (newest first)
+    final sortedTransactions = [...transactions];
+    sortedTransactions.sort((a, b) => b.date.compareTo(a.date));
+
+    // Group transactions by week
+    final Map<DateTime, List<Transaction>> groupedByWeek = {};
+
+    for (final transaction in sortedTransactions) {
+      final weekStart = _startOfWeek(transaction.date);
+
+      if (!groupedByWeek.containsKey(weekStart)) {
+        groupedByWeek[weekStart] = [];
+      }
+
+      groupedByWeek[weekStart]!.add(transaction);
+    }
+
+    // Convert to list of entries and sort by week (newest first)
+    final List<MapEntry<DateTime, List<Transaction>>> result =
+        groupedByWeek.entries.toList();
+    result.sort((a, b) => b.key.compareTo(a.key));
+
+    return result;
+  }
+
+  /// Build a week header with budget comparison
+  Widget _buildWeekHeader(BuildContext context, WeeklyBudgetAnalysis analysis) {
+    final weekDates = getWeekRangeString(analysis.weekStart, analysis.weekEnd);
+    final budgetText = '\$${analysis.budgetedAmount.toStringAsFixed(0)}';
+    final spentText = '\$${analysis.actualSpent.toStringAsFixed(0)}';
+    final differenceText = '\$${analysis.difference.abs().toStringAsFixed(0)}';
+
+    // Choose color based on budget status
+    final Color progressColor = analysis.isOverBudget
+        ? Colors.red
+        : (analysis.usagePercentage > 80 ? Colors.orange : Colors.green);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16, bottom: 8, left: 16, right: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Week date range
+          Text(
+            weekDates,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Budget info
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Budget vs Spent
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Budget', style: TextStyle(color: Colors.grey)),
+                  Text(budgetText,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Spent', style: TextStyle(color: Colors.grey)),
+                  Text(spentText,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    analysis.isOverBudget ? 'Over by' : 'Left',
+                    style: TextStyle(color: progressColor),
+                  ),
+                  Text(
+                    differenceText,
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: progressColor),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: analysis.usagePercentage > 100
+                  ? 1.0
+                  : analysis.usagePercentage / 100,
+              backgroundColor: Colors.grey[300],
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+              minHeight: 8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Check if two dates are in the same week
+  bool _isSameWeek(DateTime date1, DateTime date2) {
+    final start1 = _startOfWeek(date1);
+    final start2 = _startOfWeek(date2);
+    return start1.year == start2.year &&
+        start1.month == start2.month &&
+        start1.day == start2.day;
+  }
+
+  /// Get the start of the week (Sunday) for a given date
+  DateTime _startOfWeek(DateTime date) {
+    final diff = date.weekday % 7;
+    return DateTime(date.year, date.month, date.day - diff);
+  }
+
+  /// Get the end of the week (Saturday) for a given date
+  DateTime _endOfWeek(DateTime date) {
+    final diff = 6 - (date.weekday % 7);
+    return DateTime(date.year, date.month, date.day + diff);
   }
 
   /// Builds the loading indicator at the bottom of the list
   Widget _buildLoadingIndicator() {
     if (_isLoadingMore) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16.0),
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    } else if (_displayCount < widget.transactions.length) {
-      // Show a button to load more manually
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16.0),
-        child: Center(
-          child: ElevatedButton(
-            onPressed: _loadMore,
-            child: const Text('Load More'),
-          ),
-        ),
+        padding: EdgeInsets.all(16.0),
+        child: Center(child: CircularProgressIndicator()),
       );
     } else {
-      // We've reached the end of the list
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16.0),
-        child: Center(
-          child: Text(
-            'End of transaction history',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
+      return const SizedBox(height: 60); // Empty space at the bottom
     }
   }
 }
@@ -234,10 +457,7 @@ class _InfiniteTransactionListState extends ConsumerState<InfiniteTransactionLis
 /// Animated transaction item with swipe gestures
 /// Implements both Principle 5 (Gesture Controls) and Principle 7 (Animations)
 class _AnimatedTransactionItem extends StatelessWidget {
-  /// Transaction to display
   final Transaction transaction;
-  
-  /// Index in the list (used for staggered animations)
   final int index;
 
   const _AnimatedTransactionItem({
@@ -248,72 +468,17 @@ class _AnimatedTransactionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Create a dismissible widget for swipe-to-delete/edit functionality
-    final Widget res = Dismissible(
-      key: ValueKey('dismissible-${transaction.id}'),
-      direction: DismissDirection.horizontal,
-      
-      // Left to right swipe (edit)
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        color: Colors.blue,
-        child: const Icon(Icons.edit, color: Colors.white),
+    // Apply a staggered animation effect based on index
+    return AnimatedOpacity(
+      opacity: 1.0,
+      duration: Duration(milliseconds: 300 + (index * 50)), // Staggered timing
+      curve: Curves.easeInOut,
+      child: TransactionListItem(
+        transaction: transaction,
+        onTap: () {
+          // Show transaction details if needed
+        },
       ),
-      
-      // Right to left swipe (delete)
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      
-      // Handle dismiss action
-      onDismissed: (direction) {
-        // In a real app, these would call respective functions
-        if (direction == DismissDirection.startToEnd) {
-          // Edit action
-          debugPrint('Edit transaction: ${transaction.id}');
-        } else {
-          // Delete action
-          debugPrint('Delete transaction: ${transaction.id}');
-        }
-      },
-      
-      // Confirmation dialog before dismissing
-      confirmDismiss: (direction) async {
-        final String action = direction == DismissDirection.startToEnd
-            ? 'edit'
-            : 'delete';
-        
-        return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('Confirm $action'),
-            content: Text('Are you sure you want to $action this transaction?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Confirm'),
-              ),
-            ],
-          ),
-        ) ?? false;
-      },
-      
-      // The actual transaction item
-      child: TransactionListItem(transaction: transaction),
-    );
-    
-    // Apply fade and slide animation
-    return res.fadeSlideIn(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutQuad,
     );
   }
 }

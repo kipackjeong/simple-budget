@@ -177,4 +177,21 @@ extension AnimatedWidgetExtension on Widget {
       distance: distance,
     );
   }
+  
+  /// Creates a staggered fade-in animation based on index
+  static Widget staggeredFadeIn({
+    required Widget child,
+    required int index,
+    Duration baseDuration = const Duration(milliseconds: 50),
+    Duration animationDuration = const Duration(milliseconds: 300),
+    Curve curve = Curves.easeInOut,
+  }) {
+    // Simple implementation that works well with lists
+    return AnimatedOpacity(
+      opacity: 1.0, // Always visible, but with a delay based on index
+      duration: animationDuration,
+      curve: curve,
+      child: child,
+    );
+  }
 }

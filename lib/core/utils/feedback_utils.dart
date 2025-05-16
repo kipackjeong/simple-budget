@@ -4,7 +4,7 @@ import 'package:spending_tracker/shared/themes/app_theme.dart';
 /// Utilities for providing user feedback and control
 /// Implements Principle 8: User Control and Feedback
 class FeedbackUtils {
-  /// Shows a snackbar with a message
+  /// Shows a snackbar with a message at the TOP of the screen
   static void showSnackBar(
     BuildContext context, {
     required String message,
@@ -17,32 +17,69 @@ class FeedbackUtils {
     final IconData icon = _getIcon(type);
     
     // Clear any existing snackbars
-    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     
-    // Show snackbar with appropriate styling
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white),
+    // Create an overlay entry that appears at the top of the screen
+    final overlayState = Overlay.of(context);
+    OverlayEntry? overlayEntry;
+    
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: Material(
+          color: Colors.transparent,
+          child: SafeArea(
+            child: Container(
+              color: backgroundColor,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(icon, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  if (action != null)
+                    TextButton(
+                      onPressed: () {
+                        overlayEntry?.remove();
+                        action.onPressed();
+                      },
+                      child: Text(
+                        action.label,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  InkWell(
+                    onTap: () => overlayEntry?.remove(),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Icon(Icons.close, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: duration,
-        behavior: SnackBarBehavior.floating,
-        action: action,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          ),
         ),
       ),
     );
+    
+    overlayState.insert(overlayEntry);
+    
+    // Auto-dismiss after duration
+    if (duration != Duration.zero) {
+      Future.delayed(duration, () {
+        if (overlayEntry?.mounted ?? false) {
+          overlayEntry?.remove();
+        }
+      });
+    }
   }
   
   /// Shows a confirmation dialog

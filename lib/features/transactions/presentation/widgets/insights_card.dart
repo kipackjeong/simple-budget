@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:spending_tracker/core/utils/animation_utils.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/budget_analysis_providers.dart';
 import 'package:spending_tracker/features/transactions/domain/entities/transaction.dart';
 import 'package:spending_tracker/shared/themes/app_theme.dart';
 
@@ -18,18 +18,50 @@ class InsightsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Generate insights based on transaction data
-    final insights = _generateInsights(transactions);
+    // Watch the budget analysis provider
+    final budgetAnalysisAsync = ref.watch(weeklyBudgetAnalysisProvider);
 
-    if (insights.isEmpty) {
-      return const SizedBox(); // No insights to display
-    }
+    return budgetAnalysisAsync.when(
+      data: (weeklyAnalyses) {
+        // Generate insights based on transaction data and budget analysis
+        final insights = _generateInsights(transactions, weeklyAnalyses);
 
+        if (insights.isEmpty) {
+          return const SizedBox(); // No insights to display
+        }
+
+        // Card widget with insights (same as before)
+        return _buildInsightsCard(insights);
+      },
+      loading: () {
+        // Generate insights without budget data while loading
+        final insights = _generateInsights(transactions, []);
+
+        if (insights.isEmpty) {
+          return const SizedBox(); // No insights to display
+        }
+
+        return _buildInsightsCard(insights);
+      },
+      error: (_, __) {
+        // Generate insights without budget data on error
+        final insights = _generateInsights(transactions, []);
+
+        if (insights.isEmpty) {
+          return const SizedBox(); // No insights to display
+        }
+
+        return _buildInsightsCard(insights);
+      },
+    );
+  }
+
+  /// Build the insights card with animated items
+  Widget _buildInsightsCard(List<FinancialInsight> insights) {
     // Card widget with insights
     return Card(
-      margin: const EdgeInsets.all(16),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -67,8 +99,9 @@ class InsightsCard extends ConsumerWidget {
     );
   }
 
-  /// Generate financial insights based on transaction history
-  List<FinancialInsight> _generateInsights(List<Transaction> transactions) {
+  /// Generate financial insights based on transaction history and budget data
+  List<FinancialInsight> _generateInsights(List<Transaction> transactions,
+      List<WeeklyBudgetAnalysis> weeklyAnalyses) {
     if (transactions.isEmpty) {
       return [];
     }
@@ -113,6 +146,90 @@ class InsightsCard extends ConsumerWidget {
 
       // Calculate savings rate
       final savingsRate = income > 0 ? (income - expenses) / income : 0;
+
+      // Add budget insights if we have budget data
+      if (weeklyAnalyses.isNotEmpty) {
+        // Get the most recent week's budget data
+        final currentWeek = weeklyAnalyses.first;
+
+        // Check if current week is over budget
+        if (currentWeek.isOverBudget) {
+          insights.add(
+            FinancialInsight(
+              message:
+                  'You are \$${currentWeek.difference.abs().toStringAsFixed(0)} over your weekly budget of \$${currentWeek.budgetedAmount.toStringAsFixed(0)}.',
+              icon: Icons.warning,
+              actionable:
+                  'Consider reducing expenses for the rest of the week.',
+              isWarning: true,
+            ),
+          );
+        }
+        // Check if approaching budget limit (80% or more)
+        else if (currentWeek.usagePercentage >= 80) {
+          insights.add(
+            FinancialInsight(
+              message:
+                  'You have used ${currentWeek.usagePercentage.toStringAsFixed(0)}% of your weekly budget.',
+              icon: Icons.trending_up,
+              actionable:
+                  'You have \$${currentWeek.difference.toStringAsFixed(0)} left for the week.',
+              isWarning: true,
+            ),
+          );
+        }
+        // Check for consistent under-budget weeks
+        else if (weeklyAnalyses.length >= 3) {
+          final allUnderBudget =
+              weeklyAnalyses.take(3).every((week) => !week.isOverBudget);
+          if (allUnderBudget) {
+            insights.add(
+              FinancialInsight(
+                message:
+                    'You have stayed under budget for the last ${weeklyAnalyses.take(3).length} weeks.',
+                icon: Icons.emoji_events,
+                actionable: 'Great job maintaining your spending discipline!',
+                isPositive: true,
+              ),
+            );
+          }
+        }
+
+        // Check for spending trend compared to budget
+        if (weeklyAnalyses.length >= 2) {
+          final currentWeek = weeklyAnalyses.first;
+          final previousWeek = weeklyAnalyses[1];
+
+          final spendingChange =
+              currentWeek.actualSpent - previousWeek.actualSpent;
+          final percentChange = previousWeek.actualSpent > 0
+              ? (spendingChange / previousWeek.actualSpent * 100)
+              : 0.0;
+
+          if (percentChange > 20) {
+            insights.add(
+              FinancialInsight(
+                message:
+                    'Your spending increased by ${percentChange.abs().toStringAsFixed(0)}% compared to last week.',
+                icon: Icons.trending_up,
+                actionable:
+                    'Review your recent expenses to identify areas to cut back.',
+                isWarning: true,
+              ),
+            );
+          } else if (percentChange < -20) {
+            insights.add(
+              FinancialInsight(
+                message:
+                    'Your spending decreased by ${percentChange.abs().toStringAsFixed(0)}% compared to last week.',
+                icon: Icons.trending_down,
+                actionable: 'Keep up the good work!',
+                isPositive: true,
+              ),
+            );
+          }
+        }
+      }
 
       // Add insight about highest expense category
       if (highestCategory != null && expenses > 0) {
@@ -260,9 +377,20 @@ class _InsightItem extends StatelessWidget {
 
         // Apply animation if needed
         if (shouldAnimate) {
-          content = content.fadeSlideIn(
+          content = TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0.0, end: 1.0),
             duration: const Duration(milliseconds: 500),
-            distance: 20,
+            curve: Curves.easeOut,
+            builder: (context, opacity, child) {
+              return Opacity(
+                opacity: opacity,
+                child: Transform.translate(
+                  offset: Offset(0, 20 * (1 - opacity)),
+                  child: child,
+                ),
+              );
+            },
+            child: content,
           );
         }
 
