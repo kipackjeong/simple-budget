@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:spending_tracker/shared/themes/app_theme.dart';
 
-/// Utilities for animations throughout the app
-/// Implements Principle 7: Seamless Transitions and Animations
+/// Utility class for seamless transitions and animations throughout the app.
 class AnimationUtils {
   /// Standard animation duration
   static const Duration duration = AppTheme.animationDuration;

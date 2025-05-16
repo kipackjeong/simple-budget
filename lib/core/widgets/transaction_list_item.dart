@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:spending_tracker/features/transactions/domain/entities/transaction.dart';
 
-/// Widget that displays a single transaction item in the transaction list
+/// Displays a single transaction item in the transaction list.
 class TransactionListItem extends StatelessWidget {
   /// Transaction to display
   final Transaction transaction;

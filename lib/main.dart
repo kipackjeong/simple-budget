@@ -6,19 +6,19 @@ import 'package:spending_tracker/features/auth/presentation/screens/login_screen
 import 'package:spending_tracker/features/auth/presentation/screens/signup_screen.dart';
 import 'package:spending_tracker/features/auth/presentation/screens/password_reset_screen.dart';
 import 'package:spending_tracker/features/auth/presentation/screens/update_password_screen.dart';
+import 'package:spending_tracker/shared/config/env_config.dart';
 import 'package:spending_tracker/shared/themes/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Main entry point for the application
-/// Entry point for the application
 void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Supabase with credentials from config
   await Supabase.initialize(
-    url: 'https://hoggwzqgireribjmbnpa.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhvZ2d3enFnaXJlcmliam1ibnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY5NDU3NDYsImV4cCI6MjA2MjUyMTc0Nn0.Rdut5DuLOMnUmFHdyYcpXXdxVrwvQ6m9xV0QAkWgOHo',
+    url: EnvConfig.supabaseUrl,
+    anonKey: EnvConfig.supabaseAnonKey,
     debug: true,
   );
 
@@ -46,16 +46,15 @@ void main() async {
   );
 
   try {
-    // Run the application with Riverpod provider scope to enable state management
+    // Run the application with Riverpod provider scope
     runApp(const ProviderScope(child: SpendingTrackerApp()));
   } catch (err) {
-    // Log error and show fallback UI if needed
     debugPrint('Error starting application: $err');
-    // This would be where we'd implement error reporting/logging
+    // TODO: Integrate error reporting/logging here if needed
   }
 }
 
-/// Provider for the app's theme mode
+/// Provides the app's theme mode
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
 /// Root application widget implementing UI/UX design principles
@@ -183,6 +182,5 @@ class SpendingTrackerApp extends ConsumerWidget {
   }
 }
 
-/// Provider for tracking whether this is the first app launch
-/// Used for Principle 1: Immediate Engagement
+/// Tracks whether this is the first app launch
 final isFirstLaunchProvider = StateProvider<bool>((ref) => true);

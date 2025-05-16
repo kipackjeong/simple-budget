@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:spending_tracker/features/budgets/presentation/providers/periodic_budget_providers.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/budget_config_providers.dart';
 import 'package:spending_tracker/features/transactions/presentation/providers/transaction_providers.dart';
 
 /// Model for weekly budget analysis
@@ -27,27 +27,16 @@ final weeklyBudgetAnalysisProvider = FutureProvider<List<WeeklyBudgetAnalysis>>(
   final List<WeeklyBudgetAnalysis> result = [];
   
   try {
-    // Get transactions and budgets data
+    // Get transactions and monthly budget config
     final transactions = await ref.watch(transactionsProvider.future);
-    final periodicBudgets = await ref.watch(periodicBudgetsProvider.future);
-    
-    if (transactions.isEmpty || periodicBudgets.isEmpty) {
+    final budgetConfig = await ref.watch(budgetConfigProvider.future);
+
+    if (transactions.isEmpty || budgetConfig == null) {
       return result;
     }
-    
-    // Find weekly and monthly budgets
-    final weeklyBudget = periodicBudgets
-        .where((budget) => budget.period.toLowerCase() == 'weekly')
-        .fold(0.0, (sum, budget) => sum + budget.amount);
-        
-    // Convert monthly budgets to weekly equivalent (divide by 4)
-    final monthlyBudgetWeeklyEquivalent = periodicBudgets
-        .where((budget) => budget.period.toLowerCase() == 'monthly')
-        .fold(0.0, (sum, budget) => sum + (budget.amount / 4));
-        
-    // Total weekly budget amount
-    final totalWeeklyBudget = weeklyBudget + monthlyBudgetWeeklyEquivalent;
-    
+
+    // Calculate weekly budget from monthly budget
+    final double totalWeeklyBudget = budgetConfig.monthlyAmount / 4;
     if (totalWeeklyBudget <= 0) {
       return result;
     }

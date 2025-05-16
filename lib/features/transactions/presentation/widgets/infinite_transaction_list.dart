@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spending_tracker/core/widgets/transaction_list_item.dart';
 import 'package:spending_tracker/features/budgets/presentation/providers/budget_analysis_providers.dart';
-import 'package:spending_tracker/features/budgets/presentation/providers/periodic_budget_providers.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/budget_config_providers.dart';
+// Removed unused periodic_budget_providers import
 import 'package:spending_tracker/features/transactions/domain/entities/transaction.dart';
 
-/// A widget that displays transactions with infinite scrolling
-/// Implements Principle 3: Vertical Navigation and Infinite Scroll
+/// Displays transactions with infinite scrolling.
 class InfiniteTransactionList extends ConsumerStatefulWidget {
   /// List of all transactions
   final List<Transaction> transactions;
@@ -207,23 +207,14 @@ class _InfiniteTransactionListState
 
                 // Get the most recent weekly budget from the provider if available
                 // This is a fallback calculation - better than showing zeros
-                final budgetedAmount = ref
-                    .read(periodicBudgetsProvider)
-                    .maybeWhen(
-                      data: (budgets) {
-                        final weeklyBudgets = budgets
-                            .where((b) => b.period.toLowerCase() == 'weekly')
-                            .toList();
-
-                        if (weeklyBudgets.isNotEmpty) {
-                          // Return the sum of all weekly budgets or most recent one
-                          return weeklyBudgets.fold(
-                              0.0, (sum, budget) => sum + budget.amount);
-                        }
-                        return 0.0;
-                      },
-                      orElse: () => 0.0,
+                final budgetConfig = ref.read(budgetConfigProvider).maybeWhen(
+                      data: (config) => config,
+                      orElse: () => null,
                     );
+                final double budgetedAmount =
+                    budgetConfig != null && budgetConfig.monthlyAmount > 0
+                        ? budgetConfig.monthlyAmount / 4
+                        : 0.0;
 
                 return WeeklyBudgetAnalysis(
                   weekStart: weekStart,

@@ -130,7 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  /// Build the main body of the home screen
+  /// Builds the main body of the home screen
   Widget _buildBody(List<Transaction> transactions) {
     // Return different content based on the currently selected tab
     if (_selectedIndex == 3) {
@@ -141,10 +141,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           appBar: AppBar(
             backgroundColor: Colors.grey[100],
             elevation: 0,
-            bottom: TabBar(
+            bottom: const TabBar(
               labelColor: Colors.black,
               unselectedLabelColor: Colors.grey,
-              tabs: const [
+              tabs: [
                 Tab(text: 'Summary'),
                 Tab(text: 'Budget List'),
               ],
@@ -181,8 +181,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             totalExpenses: totalExpenses,
           ),
 
-          // Apple Pay Button
-          // const CustomApplePayButton(),
 
           // Personalized Insights Card
           InsightsCard(transactions: transactions),
@@ -232,7 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  /// Build the bottom navigation bar
+  /// Builds the bottom navigation bar
   Widget _buildBottomNavigationBar() {
     // Define which tabs are enabled (currently only Home and Budget)
     final List<bool> enabledTabs = [true, false, false, true, false];

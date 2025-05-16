@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-/// Widget that displays the balance card on the main screen
+/// Displays the balance card on the main screen.
 class BalanceCard extends StatelessWidget {
   /// The total account balance
   final double balance;

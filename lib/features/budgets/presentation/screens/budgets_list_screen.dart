@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/entities/periodic_budget.dart';
-import '../providers/periodic_budget_providers.dart';
+import '../../domain/entities/monthly_budget.dart';
+import '../providers/monthly_budget_providers.dart';
 import 'budget_management_screen.dart';
 
-/// Screen for displaying a list of all periodic budgets with a clean, modern UI
+/// Displays a list of all monthly budgets.
 class BudgetsListScreen extends ConsumerWidget {
   const BudgetsListScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final budgetsAsync = ref.watch(periodicBudgetsProvider);
+    final budgetsAsync = ref.watch(monthlyBudgetsProvider);
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -34,10 +34,10 @@ class BudgetsListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBudgetList(BuildContext context, List<PeriodicBudget> budgets) {
-    final periodicBudgets = budgets;
+  Widget _buildBudgetList(BuildContext context, List<MonthlyBudget> budgets) {
+    final monthlyBudgets = budgets;
 
-    if (periodicBudgets.isEmpty) {
+    if (monthlyBudgets.isEmpty) {
       return const Center(
         child: Text(
           'No budgets found.\nTap + to add a new budget.',
@@ -53,10 +53,10 @@ class BudgetsListScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Periodic Budgets Section
-            _buildSectionHeader('Periodic'),
+            // Monthly Budgets Section
+            _buildSectionHeader('Monthly'),
             const SizedBox(height: 16),
-            _buildPeriodicBudgetCards(context, periodicBudgets),
+            _buildMonthlyBudgetCards(context, monthlyBudgets),
           ],
         ),
       ),
@@ -74,40 +74,77 @@ class BudgetsListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPeriodicBudgetCards(
-      BuildContext context, List<PeriodicBudget> budgets) {
-    // Group budgets by period (monthly/weekly)
-    final monthlyBudgets =
-        budgets.where((b) => b.period.toLowerCase() == 'monthly').toList();
-    final weeklyBudgets =
-        budgets.where((b) => b.period.toLowerCase() == 'weekly').toList();
+  /// Builds monthly budget cards
+  Widget _buildMonthlyBudgetCards(
+    BuildContext context,
+    List<MonthlyBudget> budgets,
+  ) {
+    if (budgets.isEmpty) {
+      // No monthly budget found for user
+      return const Center(
+        child: Text(
+          'No monthly budget set. Please add your monthly budget.',
+          style: TextStyle(color: Colors.redAccent),
+        ),
+      );
+    }
+    if (budgets.length > 1) {
+      // Data integrity error: more than one monthly budget
+      return const Center(
+        child: Text(
+          'Error: Multiple monthly budgets found. Please contact support.',
+          style: TextStyle(color: Colors.redAccent),
+        ),
+      );
+    }
+
+    final MonthlyBudget monthlyBudget = budgets.first;
+    // Derive weekly budget from monthly (average weeks per month)
+    final double weeklyAmount = monthlyBudget.amount / 4.345;
 
     return Column(
       children: [
-        // Monthly budgets
-        if (monthlyBudgets.isNotEmpty)
-          ...monthlyBudgets.map((budget) => _buildBudgetCard(
-                context,
-                budget,
-                Icons.calendar_month,
-                'Monthly',
-              )),
-
-        // Weekly budgets
-        if (weeklyBudgets.isNotEmpty)
-          ...weeklyBudgets.map((budget) => _buildBudgetCard(
-                context,
-                budget,
-                Icons.calendar_view_week,
-                'Weekly',
-              )),
+        // Monthly budget card (editable)
+        _buildBudgetCard(
+          context,
+          monthlyBudget,
+          Icons.calendar_month,
+          'Monthly',
+        ),
+        const SizedBox(height: 16),
+        // Derived weekly budget card (read-only)
+        _buildDerivedWeeklyBudgetCard(context, monthlyBudget, weeklyAmount),
       ],
+    );
+  }
+
+  /// Builds a read-only weekly budget card derived from the monthly budget.
+  Widget _buildDerivedWeeklyBudgetCard(
+    BuildContext context,
+    MonthlyBudget monthlyBudget,
+    double weeklyAmount,
+  ) {
+    return Card(
+      color: Colors.grey[100],
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: const Icon(Icons.calendar_view_week, color: Colors.blueGrey),
+        title: const Text(
+          'Weekly (derived)',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          '≈ ${weeklyAmount.toStringAsFixed(2)} ${monthlyBudget.currency}',
+          style: const TextStyle(color: Colors.black87),
+        ),
+        trailing: const Icon(Icons.lock_outline, color: Colors.grey),
+      ),
     );
   }
 
   Widget _buildBudgetCard(
     BuildContext context,
-    PeriodicBudget budget,
+    MonthlyBudget budget,
     IconData icon,
     String periodLabel,
   ) {

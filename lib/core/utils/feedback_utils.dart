@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:spending_tracker/shared/themes/app_theme.dart';
 
-/// Utilities for providing user feedback and control
-/// Implements Principle 8: User Control and Feedback
+/// Utility class for user control and feedback.
 class FeedbackUtils {
   /// Shows a snackbar with a message at the TOP of the screen
   static void showSnackBar(

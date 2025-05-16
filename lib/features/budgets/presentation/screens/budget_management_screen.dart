@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:spending_tracker/features/budgets/presentation/providers/monthly_budget_providers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../domain/entities/periodic_budget.dart';
-import '../providers/periodic_budget_providers.dart';
+import '../../domain/entities/monthly_budget.dart';
+// TODO: Replace with monthly budget provider imports if needed.
 
 /// Screen for managing periodic budget settings with a clean, minimal UI
 class BudgetManagementScreen extends ConsumerStatefulWidget {
@@ -375,42 +376,21 @@ class _BudgetManagementScreenState
     final now = DateTime.now();
 
     try {
-      // Handle monthly budget division
-      if (_period == 'Monthly') {
-        // Create 4 weekly budgets
-        for (int i = 0; i < 4; i++) {
-          final weeklyBudget = PeriodicBudget(
-            id: '',
-            userId: user.id,
-            type: _isFixed ? 'fixed' : 'non-fixed',
-            period: 'Weekly',
-            amount: amount / 4,
-            insertedAt: now,
-            updatedAt: now,
-          );
-          await ref
-              .read(periodicBudgetRepositoryProvider)
-              .addPeriodicBudget(weeklyBudget);
-        }
-      } else {
-        // Create single weekly budget
-        // Get notes if provided
-        final notes = _notesController.text.trim();
+      // Create a single monthly budget only
+      // Get notes if provided
+      final notes = _notesController.text.trim();
 
-        // Create the budget
-        final budget = PeriodicBudget(
-          id: '',
-          userId: user.id,
-          type: _isFixed ? 'fixed' : 'non-fixed',
-          period: _period,
-          amount: amount,
-          insertedAt: now,
-          updatedAt: now,
-        );
-        await ref
-            .read(periodicBudgetRepositoryProvider)
-            .addPeriodicBudget(budget);
-      }
+      // Create the monthly budget
+      final budget = MonthlyBudget(
+        id: '',
+        userId: user.id,
+        year: now.year,
+        month: now.month,
+        amount: amount,
+        currency: 'USD', // TODO: Replace with actual currency selection if available
+        notes: notes.isNotEmpty ? notes : null,
+      );
+      await ref.read(monthlyBudgetRepositoryProvider).addMonthlyBudget(budget);
 
       // Success message
       if (mounted) {
@@ -420,8 +400,8 @@ class _BudgetManagementScreenState
         Navigator.of(context).pop(); // Return to previous screen
       }
 
-      // Refresh periodic budget list and store result
-      final res = await ref.refresh(periodicBudgetsProvider.future);
+      // Refresh monthly budget list and store result
+      final res = await ref.refresh(monthlyBudgetsProvider.future);
       debugPrint('Refreshed budgets, count: ${res.length}');
     } catch (e) {
       // Error handling

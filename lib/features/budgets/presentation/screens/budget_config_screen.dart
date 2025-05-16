@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/budget_config.dart';
 import '../providers/budget_config_providers.dart';
+import '../providers/fixed_expense_providers.dart';
+import 'fixed_expenses_screen.dart';
 
 /// Screen for managing budget configuration with a clean, minimal UI
 class BudgetConfigScreen extends ConsumerStatefulWidget {
@@ -26,19 +29,30 @@ class _BudgetConfigScreenState extends ConsumerState<BudgetConfigScreen> {
 
   /// Calculated weekly amount (always monthly/4)
   double? _weeklyAmount;
+  
+  // We use the totalFixedExpensesProvider directly, so no need for a local field
+  
+  /// Currency formatter
+  final NumberFormat _currencyFormat = NumberFormat.currency(
+    symbol: '\$',
+    decimalDigits: 2,
+  );
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize with existing config or defaults
-    _isFixed = widget.initialConfig?.type == 'fixed' || true;
+    // Initialize with default value since type field has been removed
+    _isFixed = true; // Default to fixed budget
     
     if (widget.initialConfig != null) {
       _amountController.text = 
           widget.initialConfig!.monthlyAmount.toStringAsFixed(2);
       _calculateWeeklyAmount();
     }
+    
+    // Load fixed expenses total
+    _loadFixedExpensesTotal();
   }
 
   /// Calculate weekly equivalent of monthly budget
@@ -49,6 +63,83 @@ class _BudgetConfigScreenState extends ConsumerState<BudgetConfigScreen> {
     } else {
       setState(() => _weeklyAmount = null);
     }
+  }
+  
+  /// Load the total amount of fixed expenses
+  Future<void> _loadFixedExpensesTotal() async {
+    try {
+      // Refresh the fixed expenses provider to update the UI
+      final _ = await ref.refresh(totalFixedExpensesProvider.future);
+      // We don't need to do anything with the result, we just want to refresh the provider
+    } catch (err) {
+      // Handle error silently
+    }
+  }
+  
+  /// Build a summary card showing fixed expenses information
+  Widget _buildFixedExpensesSummary() {
+    return ref.watch(totalFixedExpensesProvider).when(
+      data: (total) {
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Fixed Expenses',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _currencyFormat.format(total),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This is the recommended minimum for your monthly budget.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // Use fixed expenses total as amount
+                    if (total > 0) {
+                      setState(() {
+                        _amountController.text = total.toStringAsFixed(2);
+                        _calculateWeeklyAmount();
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.auto_fix_normal, size: 18),
+                  label: const Text('Use as Monthly Budget'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    textStyle: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => const SizedBox.shrink(),
+    );
   }
 
   @override
@@ -80,6 +171,9 @@ class _BudgetConfigScreenState extends ConsumerState<BudgetConfigScreen> {
               // Budget Type
               _buildSectionLabel('Budget Type'),
               const SizedBox(height: 12),
+              // Fixed Expenses Summary Card
+              _buildFixedExpensesSummary(),
+              
               _buildBudgetTypeSelector(),
 
               const SizedBox(height: 24),
@@ -325,7 +419,6 @@ class _BudgetConfigScreenState extends ConsumerState<BudgetConfigScreen> {
         final updatedConfig = BudgetConfig(
           id: widget.initialConfig!.id,
           userId: user.id,
-          type: _isFixed ? 'fixed' : 'non-fixed',
           monthlyAmount: amount,
           insertedAt: widget.initialConfig!.insertedAt,
           updatedAt: now,
@@ -339,7 +432,6 @@ class _BudgetConfigScreenState extends ConsumerState<BudgetConfigScreen> {
         final newConfig = BudgetConfig(
           id: '',  // Will be filled by Supabase
           userId: user.id,
-          type: _isFixed ? 'fixed' : 'non-fixed',
           monthlyAmount: amount,
           insertedAt: now,
           updatedAt: now,

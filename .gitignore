@@ -98,6 +98,8 @@ firebase.json
 **/.env.local
 **/.env.development
 **/.env.production
+# Environment configuration
+**/env_config.dart
 
 # Generated files
 *.g.dart

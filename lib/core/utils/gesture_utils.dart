@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Utilities for gesture handling throughout the app
-/// Implements Principle 5: Intuitive Gesture Controls
+/// Utility class for intuitive gesture controls throughout the app.
 class GestureUtils {
   /// Default swipe threshold distance in pixels
   static const double swipeThreshold = 50.0;

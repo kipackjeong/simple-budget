@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/budget_config.dart';
 import '../providers/budget_config_providers.dart';
+import '../providers/fixed_expense_providers.dart';
 import 'budget_config_screen.dart';
+import 'fixed_expenses_screen.dart';
 
-/// Screen for displaying budget configuration with a clean, modern UI
+/// Displays the budget configuration dashboard.
 class BudgetDashboardScreen extends ConsumerWidget {
   const BudgetDashboardScreen({Key? key}) : super(key: key);
 
@@ -23,15 +25,29 @@ class BudgetDashboardScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: budgetConfigAsync.when(
-        data: (config) => config == null
-            ? FloatingActionButton(
-                onPressed: () => _navigateToBudgetConfig(context, null),
-                child: const Icon(Icons.add),
-              )
-            : FloatingActionButton(
-                onPressed: () => _navigateToBudgetConfig(context, config),
-                child: const Icon(Icons.edit),
+        data: (config) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Fixed Expenses Button
+            FloatingActionButton.small(
+              heroTag: 'fixed_expenses',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const FixedExpensesScreen(),
+                ),
               ),
+              child: const Icon(Icons.account_balance_wallet),
+              tooltip: 'Manage Fixed Expenses',
+            ),
+            const SizedBox(height: 16),
+            // Main Budget Config Button
+            FloatingActionButton(
+              heroTag: 'budget_config',
+              onPressed: () => _navigateToBudgetConfig(context, config),
+              child: Icon(config == null ? Icons.add : Icons.edit),
+            ),
+          ],
+        ),
         loading: () => const SizedBox(),
         error: (_, __) => FloatingActionButton(
           onPressed: () => _navigateToBudgetConfig(context, null),
@@ -69,36 +85,34 @@ class BudgetDashboardScreen extends ConsumerWidget {
           children: [
             _buildSectionHeader('Your Budget'),
             const SizedBox(height: 24),
-            
+
             // Monthly Budget Card
             _buildBudgetCard(
               context,
               Icons.calendar_month,
               'Monthly Budget',
               config.monthlyAmount,
-              config.type,
               Colors.blue.shade800,
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Weekly Budget Card (calculated)
             _buildBudgetCard(
               context,
               Icons.calendar_view_week,
               'Weekly Budget',
               config.weeklyAmount,
-              config.type,
               Colors.green.shade700,
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Budget Information
-            _buildInfoSection(config),
-            
+            _buildInfoSection(context, config, ref),
+
             const SizedBox(height: 24),
-            
+
             // Transition Information
             _buildTransitionSection(),
           ],
@@ -123,7 +137,6 @@ class BudgetDashboardScreen extends ConsumerWidget {
     IconData icon,
     String label,
     double amount,
-    String type,
     Color accentColor,
   ) {
     return Card(
@@ -156,20 +169,19 @@ class BudgetDashboardScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            
-            // Budget Type Chip
+
+            // Budget Type Chip (using default since type property removed)
             Container(
               alignment: Alignment.centerLeft,
               child: Chip(
-                label: Text(
-                  type == 'fixed' ? 'Fixed Expenses' : 'Non-Fixed Expenses',
+                label: const Text(
+                  'Monthly Budget',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
                   ),
                 ),
-                backgroundColor: 
-                    type == 'fixed' ? Colors.indigo.shade700 : Colors.orange.shade700,
+                backgroundColor: Colors.indigo.shade700,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -180,9 +192,12 @@ class BudgetDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoSection(BudgetConfig config) {
+  Widget _buildInfoSection(BuildContext context, BudgetConfig config, WidgetRef ref) {
     final updatedDate = _formatDate(config.updatedAt);
     
+    // Get fixed expenses info using the provider
+    final fixedExpensesAsync = ref.watch(totalFixedExpensesProvider);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -200,6 +215,35 @@ class BudgetDashboardScreen extends ConsumerWidget {
               color: Colors.grey.shade800,
             ),
           ),
+          const SizedBox(height: 12),
+          
+          // Fixed Expenses Information
+          fixedExpensesAsync.when(
+            data: (fixedExpensesTotal) => fixedExpensesTotal > 0 ? ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.account_balance_wallet, color: Colors.indigo),
+              title: const Text('Fixed Expenses'),
+              subtitle: Text(
+                'Monthly: \$${fixedExpensesTotal.toStringAsFixed(2)}\nPercentage of Budget: ${((fixedExpensesTotal / config.monthlyAmount) * 100).toStringAsFixed(1)}%'
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.arrow_forward),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const FixedExpensesScreen(),
+                  ),
+                ),
+              ),
+            ) : const SizedBox.shrink(),
+            loading: () => const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.account_balance_wallet, color: Colors.grey),
+              title: Text('Fixed Expenses'),
+              subtitle: Text('Loading...'),
+            ),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          
           const SizedBox(height: 12),
           Row(
             children: [
@@ -236,13 +280,23 @@ class BudgetDashboardScreen extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     final months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
     ];
-    
+
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
-  
+
   /// Builds an informational section about the transition between budget systems
   Widget _buildTransitionSection() {
     return Container(
