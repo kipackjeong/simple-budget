@@ -37,11 +37,13 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Set system UI overlay style for a cleaner look (principle 2: Minimalist interface)
+  // Set system UI overlay style for an immersive look (Principle 2: Minimalist interface)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light, // Light icons for dark theme
+      systemNavigationBarColor: Colors.black, // Dark navigation bar
+      systemNavigationBarIconBrightness: Brightness.light, // Light navigation icons
     ),
   );
 
@@ -54,8 +56,8 @@ void main() async {
   }
 }
 
-/// Provides the app's theme mode
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+/// Provides the app's theme mode - default to dark theme for TikTok-inspired design
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
 
 /// Root application widget implementing UI/UX design principles
 class AuthGate extends StatelessWidget {

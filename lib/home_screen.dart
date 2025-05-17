@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:spending_tracker/features/transactions/domain/entities/transaction.dart';
-import 'package:spending_tracker/core/widgets/balance_card.dart';
-import 'package:spending_tracker/features/transactions/presentation/widgets/infinite_transaction_list.dart';
-import 'package:spending_tracker/features/transactions/presentation/widgets/add_transaction_form.dart';
-import 'package:spending_tracker/features/transactions/data/repositories/supabase_transaction_repository.dart';
-import 'package:spending_tracker/features/transactions/presentation/widgets/insights_card.dart';
-import 'package:spending_tracker/core/utils/feedback_utils.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:spending_tracker/features/transactions/presentation/providers/transaction_providers.dart';
-import 'package:spending_tracker/features/budgets/presentation/screens/budget_dashboard_screen.dart';
-import 'package:spending_tracker/features/budgets/presentation/screens/budgets_list_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'models/period_type.dart';
+import 'providers/transaction_providers.dart';
+import 'providers/budget_providers.dart';
+import 'providers/category_providers.dart';
+import 'providers/user_providers.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/transactions_screen.dart';
+import 'screens/budget_screen.dart';
+import 'screens/categories_screen.dart';
 
-/// Home screen of the application
+/// Home screen of the application which serves as the main navigation hub
+/// for accessing different screens in the budget app
 class HomeScreen extends ConsumerStatefulWidget {
   /// Creates the home screen
   const HomeScreen({Key? key}) : super(key: key);
@@ -22,260 +23,481 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // Current selected navigation index
+  /// Current selected navigation index
   int _selectedIndex = 0;
 
   @override
-  Widget build(BuildContext context) {
-    final asyncTx = ref.watch(transactionsProvider);
+  void initState() {
+    super.initState();
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none,
-                color: Theme.of(context).colorScheme.primary),
-            onPressed: () {},
-          ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.person_outline,
-                color: Theme.of(context).colorScheme.primary),
-            onSelected: (value) async {
-              if (value == 'signout') {
-                try {
-                  // Sign out logic (Supabase example)
-                  await Supabase.instance.client.auth.signOut();
-                  // Navigate to login screen (replace route as needed)
-                  if (context.mounted) {
-                    Navigator.pushNamedAndRemoveUntil(
-                        context, '/login', (route) => false);
-                  }
-                } catch (e) {
-                  // Handle error (optional)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Sign out failed: $e')),
-                  );
-                }
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'signout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 20, color: Colors.redAccent),
-                    SizedBox(width: 12),
-                    Text('Sign Out'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: asyncTx.when(
-        data: (transactions) => _buildBody(transactions),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error: $err')),
-      ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
-      // Only show the Add Transaction FAB when on the home tab
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: () async {
-                final result = await showModalBottomSheet<Transaction>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (context) => Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom,
-                      left: 16,
-                      right: 16,
-                      top: 24,
-                    ),
-                    child: AddTransactionForm(
-                      onSubmit: (transaction) async {
-                        try {
-                          // Add to Supabase
-                          await SupabaseTransactionRepository()
-                              .addTransaction(transaction);
-                          Navigator.of(context).pop(transaction);
-                          FeedbackUtils.showSnackBar(
-                            context,
-                            message: 'Transaction added!',
-                            type: SnackBarType.success,
-                          );
-                        } catch (err) {
-                          FeedbackUtils.showSnackBar(
-                            context,
-                            message: 'Failed to add: $err',
-                            type: SnackBarType.error,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                );
-                if (result != null) {
-                  // Refresh the transaction list after adding
-                  await ref.refresh(transactionsProvider.future);
-                }
-              },
-              tooltip: 'Add Transaction',
-              child: const Icon(Icons.add),
-            )
-          : null,
-    );
+    // Initialize data on app start
+    Future.microtask(() {
+      // Load user data
+      ref.read(userProvider.notifier).fetchCurrentUser();
+
+      // Load categories
+      ref.read(categoriesProvider.notifier).fetchCategories();
+
+      // Load transactions and budgets for the current period
+      final now = DateTime.now();
+      final startDate = DateTime(now.year, now.month, 1); // Current month start
+
+      ref.read(transactionsProvider.notifier).fetchTransactions(
+            startDate: startDate,
+            endDate: now,
+          );
+
+      ref.read(budgetProvider.notifier).fetchBudget(
+            periodType: PeriodType.monthly,
+          );
+    });
   }
 
-  /// Builds the main body of the home screen
-  Widget _buildBody(List<Transaction> transactions) {
-    // Return different content based on the currently selected tab
-    if (_selectedIndex == 3) {
-      // Budget tab - showing both new dashboard and original list
-      return DefaultTabController(
-        length: 2,
-        child: Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.grey[100],
-            elevation: 0,
-            bottom: const TabBar(
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.grey,
-              tabs: [
-                Tab(text: 'Summary'),
-                Tab(text: 'Budget List'),
-              ],
-            ),
-            title: const Text('Budget', style: TextStyle(color: Colors.black)),
-          ),
-          body: const TabBarView(
-            children: [
-              // New budget dashboard screen with configuration
-              BudgetDashboardScreen(),
-              // Original budget list screen
-              BudgetsListScreen(),
-            ],
-          ),
-        ),
-      );
+  /// Get the title for the current screen
+  Widget _getScreenTitle() {
+    switch (_selectedIndex) {
+      case 0:
+        return const Text('Dashboard');
+      case 1:
+        return const Text('Transactions');
+      case 2:
+        return const Text('Budget');
+      case 3:
+        return const Text('Categories');
+      default:
+        return const Text('Simple Budget');
     }
-    final balance = transactions.fold(0.0, (sum, t) => sum + t.amount);
-    final totalIncome = transactions
-        .where((t) => t.isIncome)
-        .fold(0.0, (sum, t) => sum + t.amount);
-    final totalExpenses = transactions
-        .where((t) => t.isExpense)
-        .fold(0.0, (sum, t) => sum + t.amount.abs());
+  }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Balance Card
-          BalanceCard(
-            balance: balance,
-            totalIncome: totalIncome,
-            totalExpenses: totalExpenses,
-          ),
+  /// Build the main body based on the selected navigation index
+  Widget _buildBody() {
+    switch (_selectedIndex) {
+      case 0:
+        return const DashboardScreen();
+      case 1:
+        return const TransactionsScreen();
+      case 2:
+        return const BudgetScreen();
+      case 3:
+        return const CategoriesScreen();
+      default:
+        return const DashboardScreen();
+    }
+  }
 
-
-          // Personalized Insights Card
-          InsightsCard(transactions: transactions),
-
-          // Recent Transactions Header
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Recent Transactions',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: Text(
-                    'See All',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Infinite Scrolling Transaction List
-          SizedBox(
-            height:
-                500, // Fixed height to allow the ListView to scroll independently
-            child: InfiniteTransactionList(
-              transactions: transactions,
-              onRefresh: () async {
-                await ref.refresh(transactionsProvider.future);
-                FeedbackUtils.showSnackBar(
-                  context,
-                  message: 'Transactions refreshed',
-                  type: SnackBarType.success,
-                );
-              },
-            ),
+  /// Build the bottom navigation bar with TikTok-style animations
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      decoration: BoxDecoration(
+        // Add subtle shadow/glow effect at the top of the navigation bar
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
-    );
-  }
-
-  /// Builds the bottom navigation bar
-  Widget _buildBottomNavigationBar() {
-    // Define which tabs are enabled (currently only Home and Budget)
-    final List<bool> enabledTabs = [true, false, false, true, false];
-
-    return BottomNavigationBar(
-      currentIndex: _selectedIndex,
-      onTap: (index) {
-        // Only allow navigation to implemented tabs (Home and Budget tabs)
-        if (enabledTabs[index]) {
+      child: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        selectedItemColor: Theme.of(context).colorScheme.secondary,
+        unselectedItemColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+        onTap: (index) {
+          // Add haptic feedback for better tactile response
+          HapticFeedback.lightImpact();
+          
           setState(() {
             _selectedIndex = index;
           });
-        } else {
-          // Show feedback for disabled tabs
-          FeedbackUtils.showSnackBar(
-            context,
-            message: 'This feature is coming soon!',
-            type: SnackBarType.info,
-            duration: const Duration(seconds: 2),
-          );
-        }
-      },
-      type: BottomNavigationBarType.fixed,
-      items: [
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
+        },
+        items: [
+          BottomNavigationBarItem(
+            icon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: _selectedIndex == 0 
+                    ? Theme.of(context).colorScheme.secondary.withOpacity(0.1) 
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.dashboard_outlined),
+            ),
+            activeIcon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.dashboard),
+            ),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: _selectedIndex == 1 
+                    ? Theme.of(context).colorScheme.secondary.withOpacity(0.1) 
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.receipt_long_outlined),
+            ),
+            activeIcon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.receipt_long),
+            ),
+            label: 'Transactions',
+          ),
+          BottomNavigationBarItem(
+            icon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: _selectedIndex == 2 
+                    ? Theme.of(context).colorScheme.secondary.withOpacity(0.1) 
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.pie_chart_outline),
+            ),
+            activeIcon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.pie_chart),
+            ),
+            label: 'Budget',
+          ),
+          BottomNavigationBarItem(
+            icon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: _selectedIndex == 3 
+                    ? Theme.of(context).colorScheme.secondary.withOpacity(0.1) 
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.category_outlined),
+            ),
+            activeIcon: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.category),
+            ),
+            label: 'Categories',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build floating action button based on current screen with TikTok-inspired design
+  Widget? _buildFloatingActionButton() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    // No FAB for Dashboard and Budget screens
+    if (_selectedIndex != 1 && _selectedIndex != 3) return null;
+    
+    // Determine action based on the active screen
+    VoidCallback onPressed = _selectedIndex == 1 
+        ? () => _showAddTransactionDialog() 
+        : () => _showAddCategoryDialog();
+    
+    // Create a visually appealing FAB with gradient and animation
+    return Container(
+      decoration: BoxDecoration(
+        // Add a subtle shadow around the FAB
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.secondary.withOpacity(0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        // Add a gradient or solid background based on theme
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.secondary,
+            Color.lerp(colorScheme.secondary, colorScheme.primary, 0.6) ?? colorScheme.secondary,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.bar_chart, color: Colors.grey.shade400),
-          label: 'Stats (Coming Soon)',
+        borderRadius: BorderRadius.circular(16),
+      ),
+      height: 56,
+      width: 56,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            HapticFeedback.mediumImpact(); // Add haptic feedback for better UX
+            onPressed();
+          },
+          child: Center(
+            child: Icon(
+              Icons.add_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.account_balance_wallet, color: Colors.grey.shade400),
-          label: 'Wallet (Coming Soon)',
+      ),
+    );
+  }
+  
+  /// Build the floating action button location to position it properly
+  FloatingActionButtonLocation get _fabLocation {
+    return FloatingActionButtonLocation.endFloat;
+  }
+
+  /// Show dialog to add a transaction
+  Future<void> _showAddTransactionDialog() async {
+    // Transaction form would go here
+    // For now we'll show a simple dialog to add a transaction
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Add transaction functionality coming soon')),
+    );
+  }
+
+  /// Show dialog to add a category
+  Future<void> _showAddCategoryDialog() async {
+    // Category form would go here
+    // For now we'll show a simple dialog to add a category
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add category functionality coming soon')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Get color scheme for consistent styling
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Scaffold(
+      // Enhanced app bar with dynamic TikTok-inspired look
+      appBar: AppBar(
+        // Use Container with gradient decoration for vibrant look
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            // Enhanced gradient with more depth and visual interest
+            gradient: LinearGradient(
+              colors: [
+                colorScheme.brightness == Brightness.dark
+                    ? colorScheme.surface
+                    : colorScheme.primaryContainer.withOpacity(0.8),
+                colorScheme.brightness == Brightness.dark
+                    ? colorScheme.surfaceVariant
+                    : colorScheme.surface,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            // Add subtle shadow for depth
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
         ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.savings),
-          label: 'Budget',
+        // Remove default elevation and add custom shadow in flexibleSpace
+        elevation: 0,
+        centerTitle: true, // Center-aligned title like TikTok
+        title: AnimatedSwitcher(
+          // Animate title changes when switching between tabs
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.3),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                )),
+                child: child,
+              ),
+            );
+          },
+          child: _getScreenTitle(),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.settings, color: Colors.grey.shade400),
-          label: 'Settings (Coming Soon)',
-        ),
-      ],
+        actions: <Widget>[
+          // Enhanced notification button with TikTok-inspired styling
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                // Container with subtle background for the button
+                Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.brightness == Brightness.dark
+                        ? colorScheme.surfaceVariant.withOpacity(0.3)
+                        : colorScheme.primaryContainer.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.notifications_outlined,
+                      color: colorScheme.primary,
+                      size: 24,
+                    ),
+                    onPressed: () {
+                      // Add haptic feedback for interaction
+                      HapticFeedback.mediumImpact();
+                      // Notification functionality would go here
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Notifications feature coming soon'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Notification badge with animated glow effect
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.secondary.withOpacity(0.6),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Profile menu with enhanced TikTok-inspired styling
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: PopupMenuButton<String>(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.brightness == Brightness.dark
+                      ? colorScheme.surfaceVariant.withOpacity(0.3)
+                      : colorScheme.primaryContainer.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.person_outline_rounded,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
+              ),
+              onSelected: (value) async {
+                if (value == 'signout') {
+                  // Add haptic feedback
+                  HapticFeedback.mediumImpact();
+                  
+                  try {
+                    // Sign out logic
+                    await Supabase.instance.client.auth.signOut();
+                    ref.read(userProvider.notifier).clearUser();
+
+                    // Navigate to login screen
+                    if (context.mounted) {
+                      Navigator.pushNamedAndRemoveUntil(
+                          context, '/login', (route) => false);
+                    }
+                  } catch (e) {
+                    // Handle error
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Sign out failed: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+              // TikTok-inspired popup styling
+              color: colorScheme.surface,
+              offset: const Offset(0, 45),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 8,
+              itemBuilder: (context) => <PopupMenuEntry<String>>[
+                // Sign out option with enhanced styling
+                PopupMenuItem<String>(
+                  value: 'signout',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: <Widget>[
+                        // Icon with container background for visual interest
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: colorScheme.errorContainer.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.logout_rounded, 
+                            size: 18, 
+                            color: colorScheme.error,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Sign Out',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8), // Add padding at the end
+        ],
+      ),
+      body: _buildBody(),
+      bottomNavigationBar: _buildBottomNavigationBar(),
+      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButtonLocation: _fabLocation,
     );
   }
 }
